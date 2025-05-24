@@ -1,0 +1,338 @@
+import sqlite3
+import hashlib
+import random
+import time
+
+def obter_palavra(grade, linha, coluna, direcao, tamanho):
+    palavra = ''
+
+    try:
+        for i in range(tamanho):
+            if direcao == 'H':
+                palavra += grade[linha][coluna + i]
+            elif direcao == 'V':
+                palavra += grade[linha + i][coluna]
+
+    except IndexError:
+        return None
+    return palavra
+
+def vertical(grade, palavra, linha, coluna):
+    if linha + len(palavra) > len(grade): 
+        return False
+    
+    for i in range(len(palavra)):
+        if grade[linha + i][coluna] != ' ' and grade[linha + i][coluna] != palavra[i]:
+            return False
+        
+    for i in range(len(palavra)):
+        grade[linha + i][coluna] = palavra[i]
+    return True
+
+def horizontal(grade, palavra, linha, coluna):
+    if coluna + len(palavra) > len(grade):
+        return False
+    
+    for i in range(len(palavra)):
+        if grade[linha][coluna + i] != ' ' and grade[linha][coluna + i] != palavra[i]:
+            return False
+        
+    for i in range(len(palavra)):
+        grade[linha][coluna + i] = palavra[i]
+    return True
+
+def criar_curso(professor_id):
+    nome = input("Nome do curso: ")
+    descricao = input("Descrição: ")
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO cursos (nome, descricao, professor_id)
+        VALUES (?, ?, ?)
+    ''', (nome, descricao, professor_id))
+    conn.commit()
+    conn.close()
+    print("Curso criado com sucesso!")
+
+def listar_cursos(professor_id=None):
+    conn = conectar()
+    cursor = conn.cursor()
+    if professor_id:
+        cursor.execute('SELECT * FROM cursos WHERE professor_id=?', (professor_id,))
+    else:
+        cursor.execute('SELECT * FROM cursos')
+    cursos = cursor.fetchall()
+    for curso in cursos:
+        print(f"[{curso[0]}] {curso[1]} - {curso[2]}")
+    conn.close()
+
+def matricular(aluno_id, curso_id):
+    conn = conectar()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO matriculas (aluno_id, curso_id)
+            VALUES (?, ?)
+        ''', (aluno_id, curso_id))
+        conn.commit()
+        print("Matrícula realizada com sucesso!")
+    except:
+        print("Erro ao realizar matrícula.")
+    conn.close()
+
+def listar_matriculas(aluno_id):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT c.nome, c.descricao FROM matriculas m
+        JOIN cursos c ON m.curso_id = c.id
+        WHERE m.aluno_id=?
+    ''', (aluno_id,))
+    cursos = cursor.fetchall()
+    print("\n--- Meus Cursos ---")
+    for c in cursos:
+        print(f"{c[0]} - {c[1]}")
+    conn.close()
+    
+def caça_palavras(concluido):
+    palavras = ["HARDWARE", "INTERNET", "SOFTWARE", "APLICATIVO", "PROGRAMAÇÃO", "DIGITAL", "ALGORITMO", "SISTEMA", "PROCESSAMENTO"]
+
+    grade = [[' ' for _ in range(14)] for _ in range(14)]
+    local = {}
+
+    for palavra in palavras:
+        presente = False
+        tentativas = 0
+
+        while not presente and tentativas < 100:
+            direcao = random.choice(['h', 'v'])
+            linha = random.randint(0, 14 - 1)
+            coluna = random.randint(0, 14 - 1)
+
+            if direcao == 'h':
+                presente = horizontal(grade, palavra, linha, coluna)
+            else:
+                presente = vertical(grade, palavra, linha, coluna)
+
+            if presente:
+                local[palavra] = (linha, coluna, direcao)
+                tentativas += 1
+
+    for i in range(len(grade)):
+        for j in range(len(grade[i])):
+            if grade[i][j] == ' ':
+                grade[i][j] = random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZÇ')
+
+    encontradas = set()
+
+    print("\nCaça-Palavras Interativo:")
+
+    while len(encontradas) < len(palavras):
+        print("   " + "  ".join([str(i) for i in range(len(grade))]))
+
+        for ind, linha in enumerate(grade):
+            print(f"{str(ind).zfill(2)}  " + "  ".join(linha))
+
+        print("\nPalavras para encontrar:")
+
+        for palavra in palavras:
+            if palavra in encontradas:
+                confere = "X"
+            else:
+                confere = ""
+            print(f"{confere} {palavra}")
+        try:
+            linhadig, colunadig, direcao = input("\nDigite a linha, coluna e direção da palavra (ex: 1 7 h) ou s para sair: ").upper().strip().split()
+            linha = int(linhadig)
+            coluna = int(colunadig)
+
+            for palavra in palavras:
+
+                if palavra in palavras:
+
+                    if palavra in encontradas:
+                        continue
+                    tentativa = obter_palavra(grade, linha, coluna, direcao, len(palavra))
+
+                    if tentativa == palavra:
+                        print(f"Você encontrou {palavra}!")
+                        encontradas.add(palavra)
+                        time.sleep(2)
+                        break
+                else:
+                    print("Nenhuma palavra nessa posição.")
+                    time.sleep(2)
+
+        except:
+            print("Resposta inválida, tente novamente.")
+            time.sleep(2)
+
+    if len(encontradas) < len(palavras):
+        print("   " + "  ".join([str(i) for i in range(len(grade))]))
+
+        for ind, linha in enumerate(grade):
+            print(f"{str(ind).zfill(2)}  " + "  ".join(linha))
+    else:
+        print("\nParabéns, você encontrou todas as palavras!")
+        time.sleep(2)
+        return True
+
+def menu_usuario(usuario):
+    print(f"\nBem-vindo, {usuario[1]}! Perfil: {usuario[4].capitalize()}")
+    while True:
+        if usuario[4] == 'admin':
+            print("\n[1] Criar curso (como professor fictício)")
+            print("[2] Listar cursos")
+        elif usuario[4] == 'professor':
+            print("\n[1] Criar curso")
+            print("[2] Listar meus cursos")
+        elif usuario[4] == 'aluno':
+            print("\n[1] Ver cursos disponíveis")
+            print("[2] Matricular-se em curso")
+            print("[3] Ver meus cursos")
+            print("[4] Abrir Caça-palavras")
+        print("[0] Sair")
+
+        opcao = input("Opção: ")
+        if opcao == '1':
+            if usuario[4] in ['professor', 'admin']:
+                criar_curso(usuario[0])
+            else:
+                listar_cursos()
+        elif opcao == '2':
+            if usuario[4] == 'aluno':
+                curso_id = input("ID do curso para se matricular: ")
+                matricular(usuario[0], curso_id)
+            else:
+                listar_cursos(professor_id=usuario[0])
+        elif opcao == '3' and usuario[4] == 'aluno':
+            listar_matriculas(usuario[0])
+        elif opcao == '4':
+            concluido = False
+            caça_palavras(concluido)
+        elif opcao == '0':
+            break
+        else:
+            print("Opção inválida.")
+
+def hash_senha(senha):
+    return hashlib.sha256(senha.encode()).hexdigest()
+
+def cadastrar(nome, email, senha, perfil):
+    conn = conectar()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO usuarios (nome, email, senha, perfil)
+            VALUES (?, ?, ?, ?)
+        ''', (nome, email, hash_senha(senha), perfil))
+        conn.commit()
+        print("Cadastro realizado com sucesso!")
+    except:
+        print("Erro: e-mail já cadastrado.")
+    conn.close()
+
+def login(email, senha):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM usuarios WHERE email=? AND senha=?
+    ''', (email, hash_senha(senha)))
+    usuario = cursor.fetchone()
+    conn.close()
+    return usuario
+
+def conectar():
+    return sqlite3.connect('plataforma.db')
+
+def criar_tabelas():
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            senha TEXT NOT NULL,
+            perfil TEXT NOT NULL
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cursos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            descricao TEXT,
+            professor_id INTEGER,
+            FOREIGN KEY(professor_id) REFERENCES usuarios(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS matriculas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            aluno_id INTEGER,
+            curso_id INTEGER,
+            FOREIGN KEY(aluno_id) REFERENCES usuarios(id),
+            FOREIGN KEY(curso_id) REFERENCES cursos(id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+def num(senha, numeros):
+    for num in numeros:
+        if num in senha:
+            return True
+    return False
+
+def esp(senha, especiais):
+    for caractere in especiais:
+        if caractere in senha:
+            return True
+    return False
+
+
+def main():
+    criar_tabelas()
+    while True:
+        print("\n=== Plataforma Educacional Segura ===")
+        print("1. Cadastrar")
+        print("2. Login")
+        print("0. Sair")
+        opcao = input("Opção: ")
+        if opcao == '1':
+            nome = input("Nome: ")
+            email = input("Email: ")
+            senha = input("Senha: ")
+            numeros = "1234567890"
+            especiais = "!@#$%^&*()-_=+"
+            if num(senha, numeros):
+                if esp(senha, especiais):
+                    perfil = input("Perfil (aluno/professor/admin): ").lower()
+                    if perfil in ['aluno', 'professor', 'admin']:
+                        cadastrar(nome, email, senha, perfil)
+                    else:
+                        print("Perfil inválido.")
+                else:
+                    print("A senha deve conter ao menos um caractere especial.")
+            else:
+                print("A senha deve conter ao menos um número.")
+                
+        elif opcao == '2':
+            email = input("Email: ")
+            senha = input("Senha: ")
+            usuario = login(email, senha)
+            if usuario:
+                menu_usuario(usuario)
+            else:
+                print("Login falhou.")
+        elif opcao == '0':
+            break
+        else:
+            print("Opção inválida.")
+
+if __name__ == '__main__':
+    main()
